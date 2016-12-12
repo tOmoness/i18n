@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Collections.Generic;
 
 namespace i18n.Domain.Entities
 {
@@ -24,6 +20,7 @@ namespace i18n.Domain.Entities
         public IEnumerable<string> ExtractedComments { get; set; }
         public IEnumerable<string> TranslatorComments { get; set; }
         public IEnumerable<string> Flags { get; set; }
+        public string FileName { get; set; }
 
         public override string ToString()
         {
