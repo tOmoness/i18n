@@ -144,136 +144,264 @@ namespace i18n.Domain.Concrete
         /// <param name="translation">The translation you wish to save. Must have Language shortag filled out.</param>
         public void SaveTranslation(Translation translation, List<string> fileNamePaths = null)
         {
-            var fileNames = new List<string>(fileNamePaths);
+            SaveTranslation(translation);
 
-            var templateFilePath = GetAbsoluteLocaleDir() + "/" + _settings.LocaleFilename + ".pot";
-            var POTDate = DateTime.Now;
-
-            if (File.Exists(templateFilePath))
+            if (_settings.GenerateTemplatePerFile)
             {
-                POTDate = File.GetLastWriteTime(templateFilePath);
-            }
+                var fileNames = new List<string>(fileNamePaths);
+                fileNames.Add(GetPathForLanguage(translation.LanguageInformation.LanguageShortTag));
 
-            if (fileNamePaths != null)
-            {
-                //adds messages.po
-                //fileNamePaths.Add(_settings.LocaleFilename);
+                var templateFilePath = GetAbsoluteLocaleDir() + "/" + _settings.LocaleFilename + ".pot";
+                var POTDate = DateTime.Now;
 
-                for (int y = 0; y < fileNamePaths.Count; y++)
+                if (File.Exists(templateFilePath))
                 {
+                    POTDate = File.GetLastWriteTime(templateFilePath);
+                }
 
-                    fileNamePaths[y] = GetPathForLanguage(translation.LanguageInformation.LanguageShortTag,
-                        fileNamePaths[y]);
+                if (fileNamePaths != null)
+                {
+                    //adds messages.po
+                    //fileNamePaths.Add(_settings.LocaleFilename);
 
-                    var fileNamePotList = new List<string>(fileNamePaths);
-                    fileNamePotList[y] = GetPathForLanguage(translation.LanguageInformation.LanguageShortTag, fileNames[y]) + ".backup";
-                    //string backupPath 
-
-                    if (File.Exists(fileNamePaths[y])) //we backup one version. more advanced backup solutions could be added here.
+                    for (int y = 0; y < fileNamePaths.Count; y++)
                     {
-                        if (File.Exists(fileNamePotList[y]))
+
+                        fileNamePaths[y] = GetPathForLanguage(translation.LanguageInformation.LanguageShortTag,
+                            fileNamePaths[y]);
+
+                        var fileNamePotList = new List<string>(fileNamePaths);
+                        fileNamePotList[y] =
+                            GetPathForLanguage(translation.LanguageInformation.LanguageShortTag, fileNames[y]) +
+                            ".backup";
+
+                        if (File.Exists(fileNamePaths[y]))
+                            //we backup one version. more advanced backup solutions could be added here.
                         {
-                            File.Delete(fileNamePotList[y]);
+                            if (File.Exists(fileNamePotList[y]))
+                            {
+                                File.Delete(fileNamePotList[y]);
+                            }
+                            System.IO.File.Move(fileNamePaths[y], fileNamePotList[y]);
                         }
-                        System.IO.File.Move(fileNamePaths[y], fileNamePotList[y]);
-                    }
 
-                    if (File.Exists(fileNamePaths[y])) //we make sure the old file is removed first
-                    {
-                        File.Delete(fileNamePaths[y]);
-                    }
-
-                    bool hasReferences = false;
-
-                    if (!File.Exists(fileNamePaths[y]))
-                    {
-                        var fileInfo = new FileInfo(fileNamePaths[y]);
-                        var dirInfo = new DirectoryInfo(Path.GetDirectoryName(fileNamePaths[y]));
-                        if (!dirInfo.Exists)
+                        if (File.Exists(fileNamePaths[y])) //we make sure the old file is removed first
                         {
-                            dirInfo.Create();
+                            File.Delete(fileNamePaths[y]);
                         }
-                        fileInfo.Create().Close();
-                    }
 
-                    using (StreamWriter stream = new StreamWriter(fileNamePaths[y]))
-                    {
-                        DebugHelpers.WriteLine("Writing file: {0}", fileNamePaths[y]);
-                        // Establish ordering of items in PO file.
-                        var orderedItems = translation.Items.Values
-                            .OrderBy(x => x.References == null || x.References.Count() == 0)
-                            // Non-orphan items before orphan items.
-                            .ThenBy(x => x.MsgKey)
-                            .Where(x => x.FileName == fileNames[y]);
-                        // Then order alphanumerically.
+                        bool hasReferences = false;
 
-                        //This is required for poedit to read the files correctly if they contains for instance swedish characters
-                        stream.WriteLine("msgid \"\"");
-                        stream.WriteLine("msgstr \"\"");
-                        stream.WriteLine("\"Project-Id-Version: \\n\"");
-                        stream.WriteLine("\"POT-Creation-Date: " + POTDate.ToString("yyyy-MM-dd HH:mmzzz") + "\\n\"");
-                        stream.WriteLine("\"PO-Revision-Date: " + DateTime.Now.ToString("yyyy-MM-dd HH:mmzzz") + "\\n\"");
-                        stream.WriteLine("\"MIME-Version: 1.0\\n\"");
-                        stream.WriteLine("\"Content-Type: text/plain; charset=utf-8\\n\"");
-                        stream.WriteLine("\"Content-Transfer-Encoding: 8bit\\n\"");
-                        stream.WriteLine("\"X-Generator: i18n.POTGenerator\\n\"");
-                        stream.WriteLine();
-
-                        foreach (var item in orderedItems)
+                        if (!File.Exists(fileNamePaths[y]))
                         {
-                            hasReferences = false;
-
-                            if (item.TranslatorComments != null)
+                            var fileInfo = new FileInfo(fileNamePaths[y]);
+                            var dirInfo = new DirectoryInfo(Path.GetDirectoryName(fileNamePaths[y]));
+                            if (!dirInfo.Exists)
                             {
-                                foreach (var translatorComment in item.TranslatorComments.Distinct())
+                                dirInfo.Create();
+                            }
+                            fileInfo.Create().Close();
+                        }
+
+                        using (StreamWriter stream = new StreamWriter(fileNamePaths[y]))
+                        {
+                            DebugHelpers.WriteLine("Writing file: {0}", fileNamePaths[y]);
+                            // Establish ordering of items in PO file.
+                            var orderedItems = translation.Items.Values
+                                .OrderBy(x => x.References == null || x.References.Count() == 0)
+                                // Non-orphan items before orphan items.
+                                .ThenBy(x => x.MsgKey)
+                                .Where(x => x.FileName == fileNames[y]);
+                            // Then order alphanumerically.
+
+                            //This is required for poedit to read the files correctly if they contains for instance swedish characters
+                            stream.WriteLine("msgid \"\"");
+                            stream.WriteLine("msgstr \"\"");
+                            stream.WriteLine("\"Project-Id-Version: \\n\"");
+                            stream.WriteLine("\"POT-Creation-Date: " + POTDate.ToString("yyyy-MM-dd HH:mmzzz") + "\\n\"");
+                            stream.WriteLine("\"PO-Revision-Date: " + DateTime.Now.ToString("yyyy-MM-dd HH:mmzzz") +
+                                             "\\n\"");
+                            stream.WriteLine("\"MIME-Version: 1.0\\n\"");
+                            stream.WriteLine("\"Content-Type: text/plain; charset=utf-8\\n\"");
+                            stream.WriteLine("\"Content-Transfer-Encoding: 8bit\\n\"");
+                            stream.WriteLine("\"X-Generator: i18n.POTGenerator\\n\"");
+                            stream.WriteLine();
+
+                            foreach (var item in orderedItems)
+                            {
+                                hasReferences = false;
+
+                                if (item.TranslatorComments != null)
                                 {
-                                    stream.WriteLine("# " + translatorComment);
+                                    foreach (var translatorComment in item.TranslatorComments.Distinct())
+                                    {
+                                        stream.WriteLine("# " + translatorComment);
+                                    }
                                 }
-                            }
 
-                            if (item.ExtractedComments != null)
-                            {
-                                foreach (var extractedComment in item.ExtractedComments.Distinct())
+                                if (item.ExtractedComments != null)
                                 {
-                                    stream.WriteLine("#. " + extractedComment);
+                                    foreach (var extractedComment in item.ExtractedComments.Distinct())
+                                    {
+                                        stream.WriteLine("#. " + extractedComment);
+                                    }
                                 }
-                            }
 
-                            if (item.References != null)
-                            {
-                                foreach (var reference in item.References.Distinct())
+                                if (item.References != null)
                                 {
-                                    hasReferences = true;
-                                    stream.WriteLine("#: " + reference.ToComment());
+                                    foreach (var reference in item.References.Distinct())
+                                    {
+                                        hasReferences = true;
+                                        stream.WriteLine("#: " + reference.ToComment());
+                                    }
                                 }
-                            }
 
-                            if (item.Flags != null)
-                            {
-                                foreach (var flag in item.Flags.Distinct())
+                                if (item.Flags != null)
                                 {
-                                    stream.WriteLine("#, " + flag);
+                                    foreach (var flag in item.Flags.Distinct())
+                                    {
+                                        stream.WriteLine("#, " + flag);
+                                    }
                                 }
+
+                                string prefix = hasReferences ? "" : prefix = "#~ ";
+
+                                if (_settings.MessageContextEnabledFromComment
+                                    && item.ExtractedComments != null
+                                    && item.ExtractedComments.Count() != 0)
+                                {
+                                    WriteString(stream, hasReferences, "msgctxt", item.ExtractedComments.First());
+                                }
+
+                                WriteString(stream, hasReferences, "msgid", escape(item.MsgId));
+                                WriteString(stream, hasReferences, "msgstr", escape(item.Message));
+
+                                stream.WriteLine("");
                             }
-
-                            string prefix = hasReferences ? "" : prefix = "#~ ";
-
-                            if (_settings.MessageContextEnabledFromComment
-                                && item.ExtractedComments != null
-                                && item.ExtractedComments.Count() != 0)
-                            {
-                                WriteString(stream, hasReferences, "msgctxt", item.ExtractedComments.First());
-                            }
-
-                            WriteString(stream, hasReferences, "msgid", escape(item.MsgId));
-                            WriteString(stream, hasReferences, "msgstr", escape(item.Message));
-
-                            stream.WriteLine("");
                         }
                     }
                 }
             }
         }
+
+
+        //Merge to one method
+        public void SaveTranslation(Translation translation)
+        {
+            var templateFilePath = GetAbsoluteLocaleDir() + "/" + _settings.LocaleFilename + ".pot";
+            var POTDate = DateTime.Now;
+            if (File.Exists(templateFilePath))
+            {
+                POTDate = File.GetLastWriteTime(templateFilePath);
+            }
+
+            string filePath = GetPathForLanguage(translation.LanguageInformation.LanguageShortTag);
+            string backupPath = GetPathForLanguage(translation.LanguageInformation.LanguageShortTag) + ".backup";
+            if (File.Exists(filePath)) //we backup one version. more advanced backup solutions could be added here.
+            {
+                if (File.Exists(backupPath))
+                {
+                    File.Delete(backupPath);
+                }
+                System.IO.File.Move(filePath, backupPath);
+            }
+
+            if (File.Exists(filePath)) //we make sure the old file is removed first
+            {
+                File.Delete(filePath);
+            }
+
+            bool hasReferences = false;
+
+            if (!File.Exists(filePath))
+            {
+                var fileInfo = new FileInfo(filePath);
+                var dirInfo = new DirectoryInfo(Path.GetDirectoryName(filePath));
+                if (!dirInfo.Exists)
+                {
+                    dirInfo.Create();
+                }
+                fileInfo.Create().Close();
+            }
+
+            using (StreamWriter stream = new StreamWriter(filePath))
+            {
+                DebugHelpers.WriteLine("Writing file: {0}", filePath);
+                // Establish ordering of items in PO file.
+                var orderedItems = translation.Items.Values
+                    .OrderBy(x => x.References == null || x.References.Count() == 0)
+                    // Non-orphan items before orphan items.
+                    .ThenBy(x => x.MsgKey);
+                // Then order alphanumerically.
+
+                //This is required for poedit to read the files correctly if they contains for instance swedish characters
+                stream.WriteLine("msgid \"\"");
+                stream.WriteLine("msgstr \"\"");
+                stream.WriteLine("\"Project-Id-Version: \\n\"");
+                stream.WriteLine("\"POT-Creation-Date: " + POTDate.ToString("yyyy-MM-dd HH:mmzzz") + "\\n\"");
+                stream.WriteLine("\"PO-Revision-Date: " + DateTime.Now.ToString("yyyy-MM-dd HH:mmzzz") + "\\n\"");
+                stream.WriteLine("\"MIME-Version: 1.0\\n\"");
+                stream.WriteLine("\"Content-Type: text/plain; charset=utf-8\\n\"");
+                stream.WriteLine("\"Content-Transfer-Encoding: 8bit\\n\"");
+                stream.WriteLine("\"X-Generator: i18n.POTGenerator\\n\"");
+                stream.WriteLine();
+
+                foreach (var item in orderedItems)
+                {
+                    hasReferences = false;
+
+                    if (item.TranslatorComments != null)
+                    {
+                        foreach (var translatorComment in item.TranslatorComments.Distinct())
+                        {
+                            stream.WriteLine("# " + translatorComment);
+                        }
+                    }
+
+                    if (item.ExtractedComments != null)
+                    {
+                        foreach (var extractedComment in item.ExtractedComments.Distinct())
+                        {
+                            stream.WriteLine("#. " + extractedComment);
+                        }
+                    }
+
+                    if (item.References != null)
+                    {
+                        foreach (var reference in item.References.Distinct())
+                        {
+                            hasReferences = true;
+                            stream.WriteLine("#: " + reference.ToComment());
+                        }
+                    }
+
+                    if (item.Flags != null)
+                    {
+                        foreach (var flag in item.Flags.Distinct())
+                        {
+                            stream.WriteLine("#, " + flag);
+                        }
+                    }
+
+                    string prefix = hasReferences ? "" : prefix = "#~ ";
+
+                    if (_settings.MessageContextEnabledFromComment
+                        && item.ExtractedComments != null
+                        && item.ExtractedComments.Count() != 0)
+                    {
+                        WriteString(stream, hasReferences, "msgctxt", item.ExtractedComments.First());
+                    }
+
+                    WriteString(stream, hasReferences, "msgid", escape(item.MsgId));
+                    WriteString(stream, hasReferences, "msgstr", escape(item.Message));
+
+                    stream.WriteLine("");
+                }
+            }
+        }
+
+
+
 
         /// <summary>
         /// Saves a template file which is a all strings (needing translation) used in the entire project. Not language dependent
