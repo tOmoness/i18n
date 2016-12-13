@@ -82,7 +82,6 @@ namespace i18n.Domain.Concrete
             }
 
             return dirList;
-
         }
 
         /// <summary>
@@ -142,266 +141,152 @@ namespace i18n.Domain.Concrete
         /// Also saves a backup of previous version
         /// </summary>
         /// <param name="translation">The translation you wish to save. Must have Language shortag filled out.</param>
-        public void SaveTranslation(Translation translation, List<string> fileNamePaths = null)
+        public void SaveTranslation(Translation translation, List<string> fileNamePaths)
         {
-            SaveTranslation(translation);
-
-            if (_settings.GenerateTemplatePerFile)
+            var fileNames = new List<string>(fileNamePaths)
             {
-                var fileNames = new List<string>(fileNamePaths);
-                fileNames.Add(GetPathForLanguage(translation.LanguageInformation.LanguageShortTag));
+                GetPathForLanguage(translation.LanguageInformation.LanguageShortTag)
+            };
 
-                var templateFilePath = GetAbsoluteLocaleDir() + "/" + _settings.LocaleFilename + ".pot";
-                var POTDate = DateTime.Now;
-
-                if (File.Exists(templateFilePath))
-                {
-                    POTDate = File.GetLastWriteTime(templateFilePath);
-                }
-
-                if (fileNamePaths != null)
-                {
-                    //adds messages.po
-                    //fileNamePaths.Add(_settings.LocaleFilename);
-
-                    for (int y = 0; y < fileNamePaths.Count; y++)
-                    {
-
-                        fileNamePaths[y] = GetPathForLanguage(translation.LanguageInformation.LanguageShortTag,
-                            fileNamePaths[y]);
-
-                        var fileNamePotList = new List<string>(fileNamePaths);
-                        fileNamePotList[y] =
-                            GetPathForLanguage(translation.LanguageInformation.LanguageShortTag, fileNames[y]) +
-                            ".backup";
-
-                        if (File.Exists(fileNamePaths[y]))
-                            //we backup one version. more advanced backup solutions could be added here.
-                        {
-                            if (File.Exists(fileNamePotList[y]))
-                            {
-                                File.Delete(fileNamePotList[y]);
-                            }
-                            System.IO.File.Move(fileNamePaths[y], fileNamePotList[y]);
-                        }
-
-                        if (File.Exists(fileNamePaths[y])) //we make sure the old file is removed first
-                        {
-                            File.Delete(fileNamePaths[y]);
-                        }
-
-                        bool hasReferences = false;
-
-                        if (!File.Exists(fileNamePaths[y]))
-                        {
-                            var fileInfo = new FileInfo(fileNamePaths[y]);
-                            var dirInfo = new DirectoryInfo(Path.GetDirectoryName(fileNamePaths[y]));
-                            if (!dirInfo.Exists)
-                            {
-                                dirInfo.Create();
-                            }
-                            fileInfo.Create().Close();
-                        }
-
-                        using (StreamWriter stream = new StreamWriter(fileNamePaths[y]))
-                        {
-                            DebugHelpers.WriteLine("Writing file: {0}", fileNamePaths[y]);
-                            // Establish ordering of items in PO file.
-                            var orderedItems = translation.Items.Values
-                                .OrderBy(x => x.References == null || x.References.Count() == 0)
-                                // Non-orphan items before orphan items.
-                                .ThenBy(x => x.MsgKey)
-                                .Where(x => x.FileName == fileNames[y]);
-                            // Then order alphanumerically.
-
-                            //This is required for poedit to read the files correctly if they contains for instance swedish characters
-                            stream.WriteLine("msgid \"\"");
-                            stream.WriteLine("msgstr \"\"");
-                            stream.WriteLine("\"Project-Id-Version: \\n\"");
-                            stream.WriteLine("\"POT-Creation-Date: " + POTDate.ToString("yyyy-MM-dd HH:mmzzz") + "\\n\"");
-                            stream.WriteLine("\"PO-Revision-Date: " + DateTime.Now.ToString("yyyy-MM-dd HH:mmzzz") +
-                                             "\\n\"");
-                            stream.WriteLine("\"MIME-Version: 1.0\\n\"");
-                            stream.WriteLine("\"Content-Type: text/plain; charset=utf-8\\n\"");
-                            stream.WriteLine("\"Content-Transfer-Encoding: 8bit\\n\"");
-                            stream.WriteLine("\"X-Generator: i18n.POTGenerator\\n\"");
-                            stream.WriteLine();
-
-                            foreach (var item in orderedItems)
-                            {
-                                hasReferences = false;
-
-                                if (item.TranslatorComments != null)
-                                {
-                                    foreach (var translatorComment in item.TranslatorComments.Distinct())
-                                    {
-                                        stream.WriteLine("# " + translatorComment);
-                                    }
-                                }
-
-                                if (item.ExtractedComments != null)
-                                {
-                                    foreach (var extractedComment in item.ExtractedComments.Distinct())
-                                    {
-                                        stream.WriteLine("#. " + extractedComment);
-                                    }
-                                }
-
-                                if (item.References != null)
-                                {
-                                    foreach (var reference in item.References.Distinct())
-                                    {
-                                        hasReferences = true;
-                                        stream.WriteLine("#: " + reference.ToComment());
-                                    }
-                                }
-
-                                if (item.Flags != null)
-                                {
-                                    foreach (var flag in item.Flags.Distinct())
-                                    {
-                                        stream.WriteLine("#, " + flag);
-                                    }
-                                }
-
-                                string prefix = hasReferences ? "" : prefix = "#~ ";
-
-                                if (_settings.MessageContextEnabledFromComment
-                                    && item.ExtractedComments != null
-                                    && item.ExtractedComments.Count() != 0)
-                                {
-                                    WriteString(stream, hasReferences, "msgctxt", item.ExtractedComments.First());
-                                }
-
-                                WriteString(stream, hasReferences, "msgid", escape(item.MsgId));
-                                WriteString(stream, hasReferences, "msgstr", escape(item.Message));
-
-                                stream.WriteLine("");
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-
-        //Merge to one method
-        public void SaveTranslation(Translation translation)
-        {
             var templateFilePath = GetAbsoluteLocaleDir() + "/" + _settings.LocaleFilename + ".pot";
             var POTDate = DateTime.Now;
+
             if (File.Exists(templateFilePath))
             {
                 POTDate = File.GetLastWriteTime(templateFilePath);
             }
 
-            string filePath = GetPathForLanguage(translation.LanguageInformation.LanguageShortTag);
-            string backupPath = GetPathForLanguage(translation.LanguageInformation.LanguageShortTag) + ".backup";
-            if (File.Exists(filePath)) //we backup one version. more advanced backup solutions could be added here.
+            fileNamePaths.Add(_settings.LocaleFilename);
+
+            for (int y = 0; y < fileNamePaths.Count; y++)
             {
-                if (File.Exists(backupPath))
+                fileNamePaths[y] = GetPathForLanguage(translation.LanguageInformation.LanguageShortTag,
+                    fileNamePaths[y]);
+
+                var fileNamePotList = new List<string>(fileNamePaths)
                 {
-                    File.Delete(backupPath);
+                    [y] = GetPathForLanguage(translation.LanguageInformation.LanguageShortTag, fileNames[y]) +
+                          ".backup"
+                };
+
+                if (File.Exists(fileNamePaths[y]))
+                    //we backup one version. more advanced backup solutions could be added here.
+                {
+                    if (File.Exists(fileNamePotList[y]))
+                    {
+                        File.Delete(fileNamePotList[y]);
+                    }
+                    System.IO.File.Move(fileNamePaths[y], fileNamePotList[y]);
                 }
-                System.IO.File.Move(filePath, backupPath);
-            }
 
-            if (File.Exists(filePath)) //we make sure the old file is removed first
-            {
-                File.Delete(filePath);
-            }
-
-            bool hasReferences = false;
-
-            if (!File.Exists(filePath))
-            {
-                var fileInfo = new FileInfo(filePath);
-                var dirInfo = new DirectoryInfo(Path.GetDirectoryName(filePath));
-                if (!dirInfo.Exists)
+                if (File.Exists(fileNamePaths[y])) //we make sure the old file is removed first
                 {
-                    dirInfo.Create();
+                    File.Delete(fileNamePaths[y]);
                 }
-                fileInfo.Create().Close();
-            }
 
-            using (StreamWriter stream = new StreamWriter(filePath))
-            {
-                DebugHelpers.WriteLine("Writing file: {0}", filePath);
-                // Establish ordering of items in PO file.
-                var orderedItems = translation.Items.Values
-                    .OrderBy(x => x.References == null || x.References.Count() == 0)
-                    // Non-orphan items before orphan items.
-                    .ThenBy(x => x.MsgKey);
-                // Then order alphanumerically.
+                bool hasReferences = false;
 
-                //This is required for poedit to read the files correctly if they contains for instance swedish characters
-                stream.WriteLine("msgid \"\"");
-                stream.WriteLine("msgstr \"\"");
-                stream.WriteLine("\"Project-Id-Version: \\n\"");
-                stream.WriteLine("\"POT-Creation-Date: " + POTDate.ToString("yyyy-MM-dd HH:mmzzz") + "\\n\"");
-                stream.WriteLine("\"PO-Revision-Date: " + DateTime.Now.ToString("yyyy-MM-dd HH:mmzzz") + "\\n\"");
-                stream.WriteLine("\"MIME-Version: 1.0\\n\"");
-                stream.WriteLine("\"Content-Type: text/plain; charset=utf-8\\n\"");
-                stream.WriteLine("\"Content-Transfer-Encoding: 8bit\\n\"");
-                stream.WriteLine("\"X-Generator: i18n.POTGenerator\\n\"");
-                stream.WriteLine();
-
-                foreach (var item in orderedItems)
+                if (!File.Exists(fileNamePaths[y]))
                 {
-                    hasReferences = false;
-
-                    if (item.TranslatorComments != null)
+                    var fileInfo = new FileInfo(fileNamePaths[y]);
+                    var dirInfo = new DirectoryInfo(Path.GetDirectoryName(fileNamePaths[y]));
+                    if (!dirInfo.Exists)
                     {
-                        foreach (var translatorComment in item.TranslatorComments.Distinct())
+                        dirInfo.Create();
+                    }
+                    fileInfo.Create().Close();
+                }
+
+                using (StreamWriter stream = new StreamWriter(fileNamePaths[y]))
+                {
+                    DebugHelpers.WriteLine("Writing file: {0}", fileNamePaths[y]);
+
+                    IEnumerable<TranslationItem> orderedItems = translation.Items.Values;
+
+                    if (_settings.GenerateTemplatePerFile)
+                    {
+                        orderedItems = translation.Items.Values
+                            .OrderBy(x => x.References == null || x.References.Count() == 0)
+                            .ThenBy(x => x.MsgKey)
+                            .Where(x => x.FileName == fileNames[y]);
+                    }
+
+                    if (fileNamePaths[y] ==
+                        GetPathForLanguage(translation.LanguageInformation.LanguageShortTag,
+                            _settings.LocaleFilename))
+                    {
+                        orderedItems = translation.Items.Values
+                            .OrderBy(x => x.References == null || x.References.Count() == 0)
+                            .ThenBy(x => x.MsgKey);
+                    }
+
+                    //This is required for poedit to read the files correctly if they contains for instance swedish characters
+                    stream.WriteLine("msgid \"\"");
+                    stream.WriteLine("msgstr \"\"");
+                    stream.WriteLine("\"Project-Id-Version: \\n\"");
+                    stream.WriteLine("\"POT-Creation-Date: " + POTDate.ToString("yyyy-MM-dd HH:mmzzz") + "\\n\"");
+                    stream.WriteLine("\"PO-Revision-Date: " + DateTime.Now.ToString("yyyy-MM-dd HH:mmzzz") +
+                                     "\\n\"");
+                    stream.WriteLine("\"MIME-Version: 1.0\\n\"");
+                    stream.WriteLine("\"Content-Type: text/plain; charset=utf-8\\n\"");
+                    stream.WriteLine("\"Content-Transfer-Encoding: 8bit\\n\"");
+                    stream.WriteLine("\"X-Generator: i18n.POTGenerator\\n\"");
+                    stream.WriteLine();
+
+                    foreach (var item in orderedItems)
+                    {
+                        hasReferences = false;
+
+                        if (item.TranslatorComments != null)
                         {
-                            stream.WriteLine("# " + translatorComment);
+                            foreach (var translatorComment in item.TranslatorComments.Distinct())
+                            {
+                                stream.WriteLine("# " + translatorComment);
+                            }
                         }
-                    }
 
-                    if (item.ExtractedComments != null)
-                    {
-                        foreach (var extractedComment in item.ExtractedComments.Distinct())
+                        if (item.ExtractedComments != null)
                         {
-                            stream.WriteLine("#. " + extractedComment);
+                            foreach (var extractedComment in item.ExtractedComments.Distinct())
+                            {
+                                stream.WriteLine("#. " + extractedComment);
+                            }
                         }
-                    }
 
-                    if (item.References != null)
-                    {
-                        foreach (var reference in item.References.Distinct())
+                        if (item.References != null)
                         {
-                            hasReferences = true;
-                            stream.WriteLine("#: " + reference.ToComment());
+                            foreach (var reference in item.References.Distinct())
+                            {
+                                hasReferences = true;
+                                stream.WriteLine("#: " + reference.ToComment());
+                            }
                         }
-                    }
 
-                    if (item.Flags != null)
-                    {
-                        foreach (var flag in item.Flags.Distinct())
+                        if (item.Flags != null)
                         {
-                            stream.WriteLine("#, " + flag);
+                            foreach (var flag in item.Flags.Distinct())
+                            {
+                                stream.WriteLine("#, " + flag);
+                            }
                         }
+
+                        string prefix = hasReferences ? "" : prefix = "#~ ";
+
+                        if (_settings.MessageContextEnabledFromComment
+                            && item.ExtractedComments != null
+                            && item.ExtractedComments.Count() != 0)
+                        {
+                            WriteString(stream, hasReferences, "msgctxt", item.ExtractedComments.First());
+                        }
+
+                        WriteString(stream, hasReferences, "msgid", escape(item.MsgId));
+                        WriteString(stream, hasReferences, "msgstr", escape(item.Message));
+
+                        stream.WriteLine("");
                     }
-
-                    string prefix = hasReferences ? "" : prefix = "#~ ";
-
-                    if (_settings.MessageContextEnabledFromComment
-                        && item.ExtractedComments != null
-                        && item.ExtractedComments.Count() != 0)
-                    {
-                        WriteString(stream, hasReferences, "msgctxt", item.ExtractedComments.First());
-                    }
-
-                    WriteString(stream, hasReferences, "msgid", escape(item.MsgId));
-                    WriteString(stream, hasReferences, "msgstr", escape(item.Message));
-
-                    stream.WriteLine("");
                 }
             }
         }
-
-
-
 
         /// <summary>
         /// Saves a template file which is a all strings (needing translation) used in the entire project. Not language dependent
@@ -424,7 +309,8 @@ namespace i18n.Domain.Concrete
 
         private void SaveTemplate(IDictionary<string, TemplateItem> items, string fileName)
         {
-            string filePath = GetAbsoluteLocaleDir() + "/" + (!string.IsNullOrWhiteSpace(fileName) ? fileName : _settings.LocaleFilename) + ".pot";
+            string filePath = GetAbsoluteLocaleDir() + "/" +
+                              (!string.IsNullOrWhiteSpace(fileName) ? fileName : _settings.LocaleFilename) + ".pot";
             string backupPath = filePath + ".backup";
 
             if (File.Exists(filePath)) //we backup one version. more advanced backup solutions could be added here.
@@ -566,92 +452,88 @@ namespace i18n.Domain.Concrete
             }
 
             foreach (var path in paths)
+            {
+                if (File.Exists(path))
+                {
+                    DebugHelpers.WriteLine("Reading file: {0}", path);
+
+                    using (var fs = File.OpenText(path))
                     {
-                        if (File.Exists(path))
+                        // http://www.gnu.org/s/hello/manual/gettext/PO-Files.html
+
+                        string line;
+                        bool itemStarted = false;
+                        while ((line = fs.ReadLine()) != null)
                         {
-                            DebugHelpers.WriteLine("Reading file: {0}", path);
+                            var extractedComments = new HashSet<string>();
+                            var translatorComments = new HashSet<string>();
+                            var flags = new HashSet<string>();
+                            var references = new List<ReferenceContext>();
 
-                            using (var fs = File.OpenText(path))
+                            //read all comments, flags and other descriptive items for this string
+                            //if we have #~ its a historical/log entry but it is the messageID/message so we skip this do/while
+                            if (line.StartsWith("#") && !line.StartsWith("#~"))
                             {
-                                // http://www.gnu.org/s/hello/manual/gettext/PO-Files.html
-
-                                string line;
-                                bool itemStarted = false;
-                                while ((line = fs.ReadLine()) != null)
+                                do
                                 {
-                                    var extractedComments = new HashSet<string>();
-                                    var translatorComments = new HashSet<string>();
-                                    var flags = new HashSet<string>();
-                                    var references = new List<ReferenceContext>();
-
-                                    //read all comments, flags and other descriptive items for this string
-                                    //if we have #~ its a historical/log entry but it is the messageID/message so we skip this do/while
-                                    if (line.StartsWith("#") && !line.StartsWith("#~"))
+                                    itemStarted = true;
+                                    switch (line[1])
                                     {
-                                        do
-                                        {
-                                            itemStarted = true;
-                                            switch (line[1])
-                                            {
-                                                case '.': //Extracted comments
-                                                    extractedComments.Add(line.Substring(2).Trim());
-                                                    break;
-                                                case ':': //references
-                                                    references.Add(ReferenceContext.Parse(line.Substring(2).Trim()));
-                                                    break;
-                                                case ',': //flags
-                                                    flags.Add(line.Substring(2).Trim());
-                                                    break;
-                                                case '|': //msgid previous-untranslated-string - NOT used by us
-                                                    break;
-                                                default: //translator comments
-                                                    translatorComments.Add(line.Substring(1).Trim());
-                                                    break;
-                                            }
-
-                                        } while ((line = fs.ReadLine()) != null && line.StartsWith("#"));
+                                        case '.': //Extracted comments
+                                            extractedComments.Add(line.Substring(2).Trim());
+                                            break;
+                                        case ':': //references
+                                            references.Add(ReferenceContext.Parse(line.Substring(2).Trim()));
+                                            break;
+                                        case ',': //flags
+                                            flags.Add(line.Substring(2).Trim());
+                                            break;
+                                        case '|': //msgid previous-untranslated-string - NOT used by us
+                                            break;
+                                        default: //translator comments
+                                            translatorComments.Add(line.Substring(1).Trim());
+                                            break;
                                     }
+                                } while ((line = fs.ReadLine()) != null && line.StartsWith("#"));
+                            }
 
-                                    if (line != null && (itemStarted || line.StartsWith("#~")))
-                                    {
-                                        TranslationItem item = ParseBody(fs, line, extractedComments);
-                                        if (item != null)
+                            if (line != null && (itemStarted || line.StartsWith("#~")))
+                            {
+                                TranslationItem item = ParseBody(fs, line, extractedComments);
+                                if (item != null)
+                                {
+                                    //
+                                    item.TranslatorComments = translatorComments;
+                                    item.ExtractedComments = extractedComments;
+                                    item.Flags = flags;
+                                    item.References = references;
+                                    //
+                                    items.AddOrUpdate(
+                                        item.MsgKey,
+                                        // Add routine.
+                                        k => { return item; },
+                                        // Update routine.
+                                        (k, v) =>
                                         {
-                                            //
-                                            item.TranslatorComments = translatorComments;
-                                            item.ExtractedComments = extractedComments;
-                                            item.Flags = flags;
-                                            item.References = references;
-                                            //
-                                            items.AddOrUpdate(
-                                                item.MsgKey,
-                                                // Add routine.
-                                                k =>
-                                                {
-                                                    return item;
-                                                },
-                                                // Update routine.
-                                                (k, v) =>
-                                                {
-                                                    v.References = v.References.Append(item.References);
-                                                    var referencesAsComments =
-                                                        item.References.Select(r => r.ToComment()).ToList();
-                                                    v.ExtractedComments = v.ExtractedComments.Append(referencesAsComments);
-                                                    v.TranslatorComments = v.TranslatorComments.Append(referencesAsComments);
-                                                    v.Flags = v.Flags.Append(referencesAsComments);
-                                                    return v;
-                                                });
-                                        }
-                                    }
-
-                                    itemStarted = false;
+                                            v.References = v.References.Append(item.References);
+                                            var referencesAsComments =
+                                                item.References.Select(r => r.ToComment()).ToList();
+                                            v.ExtractedComments = v.ExtractedComments.Append(referencesAsComments);
+                                            v.TranslatorComments = v.TranslatorComments.Append(referencesAsComments);
+                                            v.Flags = v.Flags.Append(referencesAsComments);
+                                            return v;
+                                        });
                                 }
                             }
+
+                            itemStarted = false;
                         }
                     }
-                    translation.Items = items;
-                    return translation;
                 }
+            }
+            translation.Items = items;
+            return translation;
+        }
 
         /// <summary>
         /// Removes the preceding characters in a file showing that an item is historical/log. That is to say it has been removed from the project. We don't need care about the character as the fact that it lacks references is what tells us it's a log item
@@ -690,7 +572,7 @@ namespace i18n.Domain.Concrete
                 return null;
             }
 
-            TranslationItem message = new TranslationItem { MsgKey = "" };
+            TranslationItem message = new TranslationItem {MsgKey = ""};
             StringBuilder sb = new StringBuilder();
 
             string msgctxt = null;
@@ -728,9 +610,9 @@ namespace i18n.Domain.Concrete
                 message.MsgId = Unescape(sb.ToString());
 
                 // If no msgctxt is set then msgkey is the msgid; otherwise it is msgid+msgctxt.
-                message.MsgKey = string.IsNullOrEmpty(msgctxt) ?
-                    message.MsgId :
-                    TemplateItem.KeyFromMsgidAndComment(message.MsgId, msgctxt, true);
+                message.MsgKey = string.IsNullOrEmpty(msgctxt)
+                    ? message.MsgId
+                    : TemplateItem.KeyFromMsgidAndComment(message.MsgId, msgctxt, true);
             }
 
             sb.Clear();
@@ -836,7 +718,8 @@ namespace i18n.Domain.Concrete
         /// <seealso href="http://stackoverflow.com/questions/6629020/evaluate-escaped-string/8854626#8854626"/>
         private string Unescape(string s)
         {
-            Regex regex_unescape = new Regex("\\\\[abfnrtv?\"'\\\\]|\\\\[0-3]?[0-7]{1,2}|\\\\u[0-9a-fA-F]{4}|.", RegexOptions.Singleline);
+            Regex regex_unescape = new Regex("\\\\[abfnrtv?\"'\\\\]|\\\\[0-3]?[0-7]{1,2}|\\\\u[0-9a-fA-F]{4}|.",
+                RegexOptions.Singleline);
 
             StringBuilder sb = new StringBuilder();
             MatchCollection mc = regex_unescape.Matches(s, 0);
@@ -859,7 +742,7 @@ namespace i18n.Domain.Concrete
                             i += m.Value[j] - '0';
                         }
 
-                        sb.Append((char)i);
+                        sb.Append((char) i);
                     }
                     else if (m.Value[1] == 'u')
                     {
@@ -883,7 +766,7 @@ namespace i18n.Domain.Concrete
                             }
                         }
 
-                        sb.Append((char)i);
+                        sb.Append((char) i);
                     }
                     else
                     {
