@@ -2,9 +2,9 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-[assembly: AssemblyVersion("2.1.10")]
-[assembly: AssemblyFileVersion("2.1.10")]
-[assembly: AssemblyInformationalVersion("2.1.10")] // picked up by nuspec $version$ identifier
+[assembly: AssemblyVersion("2.1.11")]
+[assembly: AssemblyFileVersion("2.1.11")]
+[assembly: AssemblyInformationalVersion("2.1.11-pre001")] // picked up by nuspec $version$ identifier
 
 // General Information about an assembly is controlled through the following 
 // set of attributes. Change these attribute values to modify the information
@@ -14,7 +14,7 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("Martin Connell,Daniel Crenna,Bernie Zhao,contributors")] // picked up by nuspec $author$ identifier
 [assembly: AssemblyProduct("i18n.Adapter.OwinSystemWeb")]
-[assembly: AssemblyCopyright("Copyright (c) 2011-2016 Martin Connell, Daniel Crenna, Bernie Zhao and contributors.")]
+[assembly: AssemblyCopyright("Copyright (c) 2011-2017 Martin Connell, Daniel Crenna, Bernie Zhao and contributors.")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 
