@@ -100,7 +100,7 @@ namespace i18n.PostBuild
             var items = nuggetFinder.ParseAll();
             if (repository.SaveTemplate(items))
             {
-                var merger = new TranslationMerger(repository);
+                var merger = new TranslationMerger(repository, settings);
                 merger.MergeAllTranslation(items);
             }
 

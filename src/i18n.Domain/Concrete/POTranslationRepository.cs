@@ -16,7 +16,7 @@ namespace i18n.Domain.Concrete
 {
     public class POTranslationRepository : ITranslationRepository
     {
-        private i18nSettings _settings;
+        private readonly i18nSettings _settings;
 
         public POTranslationRepository(i18nSettings settings)
         {
@@ -50,7 +50,7 @@ namespace i18n.Domain.Concrete
             {
                 //We instead check for file structure
                 DirectoryInfo di = new DirectoryInfo(GetAbsoluteLocaleDir());
-                
+
                 foreach (var dir in di.EnumerateDirectories().Select(x => x.Name))
                 {
                     try
@@ -64,8 +64,8 @@ namespace i18n.Domain.Concrete
                         };
                         dirList.Add(lang);
                     }
-                    catch (System.Globalization.CultureNotFoundException) 
-                    { 
+                    catch (System.Globalization.CultureNotFoundException)
+                    {
                         //There is a directory in the locale directory that is not a valid culture so ignore it
                     }
                 }
@@ -82,7 +82,6 @@ namespace i18n.Domain.Concrete
             }
 
             return dirList;
-
         }
 
         /// <summary>
@@ -121,8 +120,10 @@ namespace i18n.Domain.Concrete
         public CacheDependency GetCacheDependencyForSingleLanguage(string langtag)
         {
             var path = GetPathForLanguage(langtag);
-            if (!File.Exists(path)) {
-                return null; }
+            if (!File.Exists(path))
+            {
+                return null;
+            }
             return new CacheDependency(path);
         }
 
@@ -140,113 +141,149 @@ namespace i18n.Domain.Concrete
         /// Also saves a backup of previous version
         /// </summary>
         /// <param name="translation">The translation you wish to save. Must have Language shortag filled out.</param>
-        public void SaveTranslation(Translation translation)
+        public void SaveTranslation(Translation translation, List<string> fileNamePaths)
         {
+            var fileNames = new List<string>(fileNamePaths)
+            {
+                GetPathForLanguage(translation.LanguageInformation.LanguageShortTag)
+            };
+
             var templateFilePath = GetAbsoluteLocaleDir() + "/" + _settings.LocaleFilename + ".pot";
             var POTDate = DateTime.Now;
-            if (File.Exists(templateFilePath)) {
-                POTDate = File.GetLastWriteTime(templateFilePath); }
 
-            string filePath = GetPathForLanguage(translation.LanguageInformation.LanguageShortTag);
-            string backupPath = GetPathForLanguage(translation.LanguageInformation.LanguageShortTag) + ".backup";
-            if (File.Exists(filePath)) //we backup one version. more advanced backup solutions could be added here.
+            if (File.Exists(templateFilePath))
             {
-                if (File.Exists(backupPath))
+                POTDate = File.GetLastWriteTime(templateFilePath);
+            }
+
+            fileNamePaths.Add(_settings.LocaleFilename);
+
+            for (int y = 0; y < fileNamePaths.Count; y++)
+            {
+                fileNamePaths[y] = GetPathForLanguage(translation.LanguageInformation.LanguageShortTag,
+                    fileNamePaths[y]);
+
+                var fileNamePotList = new List<string>(fileNamePaths)
                 {
-                    File.Delete(backupPath);
+                    [y] = GetPathForLanguage(translation.LanguageInformation.LanguageShortTag, fileNames[y]) +
+                          ".backup"
+                };
+
+                if (File.Exists(fileNamePaths[y]))
+                    //we backup one version. more advanced backup solutions could be added here.
+                {
+                    if (File.Exists(fileNamePotList[y]))
+                    {
+                        File.Delete(fileNamePotList[y]);
+                    }
+                    System.IO.File.Move(fileNamePaths[y], fileNamePotList[y]);
                 }
-                System.IO.File.Move(filePath, backupPath);
-            }
 
-            if (File.Exists(filePath)) //we make sure the old file is removed first
-            {
-                File.Delete(filePath);
-            }
-
-            bool hasReferences = false;
-
-            if (!File.Exists(filePath))
-            {
-                var fileInfo = new FileInfo(filePath);
-                var dirInfo = new DirectoryInfo(Path.GetDirectoryName(filePath));
-                if (!dirInfo.Exists)
+                if (File.Exists(fileNamePaths[y])) //we make sure the old file is removed first
                 {
-                    dirInfo.Create();
+                    File.Delete(fileNamePaths[y]);
                 }
-                fileInfo.Create().Close();
-            }
 
-            using (StreamWriter stream = new StreamWriter(filePath))
-            {
-                DebugHelpers.WriteLine("Writing file: {0}", filePath);
-               // Establish ordering of items in PO file.
-                var orderedItems = translation.Items.Values
-                    .OrderBy(x => x.References == null || x.References.Count() == 0)
-                        // Non-orphan items before orphan items.
-                    .ThenBy(x => x.MsgKey);
-                        // Then order alphanumerically.
+                bool hasReferences = false;
 
-                //This is required for poedit to read the files correctly if they contains for instance swedish characters
-                stream.WriteLine("msgid \"\"");
-                stream.WriteLine("msgstr \"\"");
-                stream.WriteLine("\"Project-Id-Version: \\n\"");
-                stream.WriteLine("\"POT-Creation-Date: " + POTDate.ToString("yyyy-MM-dd HH:mmzzz") + "\\n\"");
-                stream.WriteLine("\"PO-Revision-Date: " + DateTime.Now.ToString("yyyy-MM-dd HH:mmzzz") + "\\n\"");
-                stream.WriteLine("\"MIME-Version: 1.0\\n\"");
-                stream.WriteLine("\"Content-Type: text/plain; charset=utf-8\\n\"");
-                stream.WriteLine("\"Content-Transfer-Encoding: 8bit\\n\"");
-                stream.WriteLine("\"X-Generator: i18n.POTGenerator\\n\"");
-                stream.WriteLine();
-
-                foreach (var item in orderedItems)
+                if (!File.Exists(fileNamePaths[y]))
                 {
-                    hasReferences = false;
-
-                    if (item.TranslatorComments != null)
+                    var fileInfo = new FileInfo(fileNamePaths[y]);
+                    var dirInfo = new DirectoryInfo(Path.GetDirectoryName(fileNamePaths[y]));
+                    if (!dirInfo.Exists)
                     {
-                        foreach (var translatorComment in item.TranslatorComments.Distinct())
-                        {
-                            stream.WriteLine("# " + translatorComment);
-                        }
+                        dirInfo.Create();
                     }
+                    fileInfo.Create().Close();
+                }
 
-                    if (item.ExtractedComments != null)
+                using (StreamWriter stream = new StreamWriter(fileNamePaths[y]))
+                {
+                    DebugHelpers.WriteLine("Writing file: {0}", fileNamePaths[y]);
+
+                    IEnumerable<TranslationItem> orderedItems = translation.Items.Values;
+
+                    if (_settings.GenerateTemplatePerFile)
                     {
-                        foreach (var extractedComment in item.ExtractedComments.Distinct())
-                        {
-                            stream.WriteLine("#. " + extractedComment);
-                        }
+                        orderedItems = translation.Items.Values
+                            .OrderBy(x => x.References == null || x.References.Count() == 0)
+                            .ThenBy(x => x.MsgKey)
+                            .Where(x => x.FileName == fileNames[y]);
                     }
 
-                    if (item.References != null)
+                    if (fileNamePaths[y] ==
+                        GetPathForLanguage(translation.LanguageInformation.LanguageShortTag,
+                            _settings.LocaleFilename))
                     {
-                        foreach (var reference in item.References.Distinct())
-                        {
-                            hasReferences = true;
-                            stream.WriteLine("#: " + reference.ToComment());
-                        }
+                        orderedItems = translation.Items.Values
+                            .OrderBy(x => x.References == null || x.References.Count() == 0)
+                            .ThenBy(x => x.MsgKey);
                     }
 
-                    if (item.Flags != null)
+                    //This is required for poedit to read the files correctly if they contains for instance swedish characters
+                    stream.WriteLine("msgid \"\"");
+                    stream.WriteLine("msgstr \"\"");
+                    stream.WriteLine("\"Project-Id-Version: \\n\"");
+                    stream.WriteLine("\"POT-Creation-Date: " + POTDate.ToString("yyyy-MM-dd HH:mmzzz") + "\\n\"");
+                    stream.WriteLine("\"PO-Revision-Date: " + DateTime.Now.ToString("yyyy-MM-dd HH:mmzzz") +
+                                     "\\n\"");
+                    stream.WriteLine("\"MIME-Version: 1.0\\n\"");
+                    stream.WriteLine("\"Content-Type: text/plain; charset=utf-8\\n\"");
+                    stream.WriteLine("\"Content-Transfer-Encoding: 8bit\\n\"");
+                    stream.WriteLine("\"X-Generator: i18n.POTGenerator\\n\"");
+                    stream.WriteLine();
+
+                    foreach (var item in orderedItems)
                     {
-                        foreach (var flag in item.Flags.Distinct())
+                        hasReferences = false;
+
+                        if (item.TranslatorComments != null)
                         {
-                            stream.WriteLine("#, " + flag);
+                            foreach (var translatorComment in item.TranslatorComments.Distinct())
+                            {
+                                stream.WriteLine("# " + translatorComment);
+                            }
                         }
+
+                        if (item.ExtractedComments != null)
+                        {
+                            foreach (var extractedComment in item.ExtractedComments.Distinct())
+                            {
+                                stream.WriteLine("#. " + extractedComment);
+                            }
+                        }
+
+                        if (item.References != null)
+                        {
+                            foreach (var reference in item.References.Distinct())
+                            {
+                                hasReferences = true;
+                                stream.WriteLine("#: " + reference.ToComment());
+                            }
+                        }
+
+                        if (item.Flags != null)
+                        {
+                            foreach (var flag in item.Flags.Distinct())
+                            {
+                                stream.WriteLine("#, " + flag);
+                            }
+                        }
+
+                        string prefix = hasReferences ? "" : prefix = "#~ ";
+
+                        if (_settings.MessageContextEnabledFromComment
+                            && item.ExtractedComments != null
+                            && item.ExtractedComments.Count() != 0)
+                        {
+                            WriteString(stream, hasReferences, "msgctxt", item.ExtractedComments.First());
+                        }
+
+                        WriteString(stream, hasReferences, "msgid", escape(item.MsgId));
+                        WriteString(stream, hasReferences, "msgstr", escape(item.Message));
+
+                        stream.WriteLine("");
                     }
-
-                    string prefix = hasReferences ? "" : prefix = "#~ ";
-
-                    if (_settings.MessageContextEnabledFromComment
-                        && item.ExtractedComments != null
-                        && item.ExtractedComments.Count() != 0) {
-                        WriteString(stream, hasReferences, "msgctxt", item.ExtractedComments.First());
-                    }
-
-                    WriteString(stream, hasReferences, "msgid", escape(item.MsgId));
-                    WriteString(stream, hasReferences, "msgstr", escape(item.Message));
-
-                    stream.WriteLine("");
                 }
             }
         }
@@ -274,7 +311,8 @@ namespace i18n.Domain.Concrete
 
         private bool SaveTemplate(IDictionary<string, TemplateItem> items, string fileName)
         {
-            string filePath = GetAbsoluteLocaleDir() + "/" + (!string.IsNullOrWhiteSpace(fileName) ? fileName : _settings.LocaleFilename) + ".pot";
+            string filePath = GetAbsoluteLocaleDir() + "/" +
+                              (!string.IsNullOrWhiteSpace(fileName) ? fileName : _settings.LocaleFilename) + ".pot";
             string backupPath = filePath + ".backup";
 
             if (File.Exists(filePath)) //we backup one version. more advanced backup solutions could be added here.
@@ -308,9 +346,9 @@ namespace i18n.Domain.Concrete
                 // Establish ordering of items in PO file.
                 var orderedItems = items.Values
                     .OrderBy(x => x.References == null || x.References.Count() == 0)
-                        // Non-orphan items before orphan items.
+                    // Non-orphan items before orphan items.
                     .ThenBy(x => x.MsgKey);
-                        // Then order alphanumerically.
+                // Then order alphanumerically.
 
                 // This is required for poedit to read the files correctly if they contains 
                 // for instance swedish characters.
@@ -405,13 +443,17 @@ namespace i18n.Domain.Concrete
 
             List<string> paths = new List<string>();
 
-            if (!_settings.GenerateTemplatePerFile || loadingCache) {
-                paths.Add(GetPathForLanguage(langtag)); }
+            if (!_settings.GenerateTemplatePerFile || loadingCache)
+            {
+                paths.Add(GetPathForLanguage(langtag));
+            }
 
             foreach (var file in _settings.LocaleOtherFiles)
             {
-                if (file.IsSet()) {
-                    paths.Add(GetPathForLanguage(langtag, file)); }
+                if (file.IsSet())
+                {
+                    paths.Add(GetPathForLanguage(langtag, file));
+                }
             }
 
             if (_settings.GenerateTemplatePerFile && !loadingCache)
@@ -439,10 +481,10 @@ namespace i18n.Domain.Concrete
                         bool itemStarted = false;
                         while ((line = fs.ReadLine()) != null)
                         {
-                            var extractedComments  = new HashSet<string>();
+                            var extractedComments = new HashSet<string>();
                             var translatorComments = new HashSet<string>();
-                            var flags              = new HashSet<string>();
-                            var references         = new List<ReferenceContext>();
+                            var flags = new HashSet<string>();
+                            var references = new List<ReferenceContext>();
 
                             //read all comments, flags and other descriptive items for this string
                             //if we have #~ its a historical/log entry but it is the messageID/message so we skip this do/while
@@ -468,7 +510,6 @@ namespace i18n.Domain.Concrete
                                             translatorComments.Add(line.Substring(1).Trim());
                                             break;
                                     }
-
                                 } while ((line = fs.ReadLine()) != null && line.StartsWith("#"));
                             }
 
@@ -486,9 +527,7 @@ namespace i18n.Domain.Concrete
                                     items.AddOrUpdate(
                                         item.MsgKey,
                                         // Add routine.
-                                        k => {
-                                            return item;
-                                        },
+                                        k => { return item; },
                                         // Update routine.
                                         (k, v) =>
                                         {
@@ -544,10 +583,12 @@ namespace i18n.Domain.Concrete
         {
             string originalLine = line;
 
-            if (string.IsNullOrEmpty(line)) {
-                return null; }
+            if (string.IsNullOrEmpty(line))
+            {
+                return null;
+            }
 
-            TranslationItem message = new TranslationItem { MsgKey = "" };
+            TranslationItem message = new TranslationItem {MsgKey = ""};
             StringBuilder sb = new StringBuilder();
 
             string msgctxt = null;
@@ -583,11 +624,11 @@ namespace i18n.Domain.Concrete
                 }
 
                 message.MsgId = Unescape(sb.ToString());
-                
+
                 // If no msgctxt is set then msgkey is the msgid; otherwise it is msgid+msgctxt.
-                message.MsgKey = string.IsNullOrEmpty(msgctxt) ?
-                    message.MsgId:
-                    TemplateItem.KeyFromMsgidAndComment(message.MsgId, msgctxt, true);
+                message.MsgKey = string.IsNullOrEmpty(msgctxt)
+                    ? message.MsgId
+                    : TemplateItem.KeyFromMsgidAndComment(message.MsgId, msgctxt, true);
             }
 
             sb.Clear();
@@ -617,40 +658,44 @@ namespace i18n.Domain.Concrete
         /// <param name="value"></param>
         private static void WriteString(StreamWriter stream, bool hasReferences, string type, string value)
         {
-        // Logic for outputting multi-line msgid.
-        //
-        // IN : a<LF>b
-        // OUT: msgid ""
-        //      "a\n"
-        //      "b"
-        //
-        // IN : a<LF>b<LF>
-        // OUT: msgid ""
-        // OUT: "a\n"
-        //      "b\n"
-        //
+            // Logic for outputting multi-line msgid.
+            //
+            // IN : a<LF>b
+            // OUT: msgid ""
+            //      "a\n"
+            //      "b"
+            //
+            // IN : a<LF>b<LF>
+            // OUT: msgid ""
+            // OUT: "a\n"
+            //      "b\n"
+            //
             value = value ?? "";
             value = value.Replace("\r\n", "\n");
             StringBuilder sb = new StringBuilder(100);
-           // If multi-line
-            if (value.Contains('\n')) {
-               // · msgid ""
+            // If multi-line
+            if (value.Contains('\n'))
+            {
+                // · msgid ""
                 sb.AppendFormat("{0} \"\"\r\n", type);
-               // · following lines
+                // · following lines
                 sb.Append("\"");
                 string s1 = value.Replace("\n", "\\n\"\r\n\"");
                 sb.Append(s1);
                 sb.Append("\"");
             }
-           // If single-line
-            else {
-                sb.AppendFormat("{0} \"{1}\"", type, value); }
-           // If noref...prefix each line with "#~ ".
-            if (!hasReferences) {
+            // If single-line
+            else
+            {
+                sb.AppendFormat("{0} \"{1}\"", type, value);
+            }
+            // If noref...prefix each line with "#~ ".
+            if (!hasReferences)
+            {
                 sb.Insert(0, "#~ ");
                 sb.Replace("\r\n", "\r\n#~ ");
             }
-           //
+            //
             string s = sb.ToString();
             stream.WriteLine(s);
         }
@@ -689,7 +734,8 @@ namespace i18n.Domain.Concrete
         /// <seealso href="http://stackoverflow.com/questions/6629020/evaluate-escaped-string/8854626#8854626"/>
         private string Unescape(string s)
         {
-            Regex regex_unescape = new Regex("\\\\[abfnrtv?\"'\\\\]|\\\\[0-3]?[0-7]{1,2}|\\\\u[0-9a-fA-F]{4}|.", RegexOptions.Singleline);
+            Regex regex_unescape = new Regex("\\\\[abfnrtv?\"'\\\\]|\\\\[0-3]?[0-7]{1,2}|\\\\u[0-9a-fA-F]{4}|.",
+                RegexOptions.Singleline);
 
             StringBuilder sb = new StringBuilder();
             MatchCollection mc = regex_unescape.Matches(s, 0);
@@ -712,7 +758,7 @@ namespace i18n.Domain.Concrete
                             i += m.Value[j] - '0';
                         }
 
-                        sb.Append((char)i);
+                        sb.Append((char) i);
                     }
                     else if (m.Value[1] == 'u')
                     {
@@ -736,7 +782,7 @@ namespace i18n.Domain.Concrete
                             }
                         }
 
-                        sb.Append((char)i);
+                        sb.Append((char) i);
                     }
                     else
                     {

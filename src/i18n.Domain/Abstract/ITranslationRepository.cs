@@ -43,7 +43,7 @@ namespace i18n.Domain.Abstract
         /// Saves a translation (persisting it). How this is done is completely up to the implementation. As long as the same language can be loaded with <see cref="GetTranslation"/>
         /// </summary>
         /// <param name="translation">The translation to save. At minimum the Items and Language->LanguageShortTag must be set</param>
-        void SaveTranslation(Translation translation);
+        void SaveTranslation(Translation translation, List<string> fileNameList);
 
         /// <summary>
         /// Save a template. A template differs from a translation in that a translation holds all messages but no translation data. It is used for updating translations to make sure all translations have all strings.
