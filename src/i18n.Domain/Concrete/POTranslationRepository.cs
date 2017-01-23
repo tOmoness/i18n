@@ -148,20 +148,27 @@ namespace i18n.Domain.Concrete
                 GetPathForLanguage(translation.LanguageInformation.LanguageShortTag)
             };
 
-            var templateFilePath = GetAbsoluteLocaleDir() + "/" + _settings.LocaleFilename + ".pot";
-            var POTDate = DateTime.Now;
+            //var templateFilePath = GetAbsoluteLocaleDir() + "/" + _settings.LocaleFilename + ".pot";
+            var potDate = $"\"POT-Creation-Date: {DateTime.Now:yyyy-MM-dd HH:mmzzz}\\n\"";
 
-            if (File.Exists(templateFilePath))
-            {
-                POTDate = File.GetLastWriteTime(templateFilePath);
-            }
+            //if (File.Exists(templateFilePath))
+            //{
+            //    potDate = File.ReadAllLines(templateFilePath).Skip(3).FirstOrDefault();
+            //}
 
             fileNamePaths.Add(_settings.LocaleFilename);
 
-            for (int y = 0; y < fileNamePaths.Count; y++)
+            for (var y = 0; y < fileNamePaths.Count; y++)
             {
                 fileNamePaths[y] = GetPathForLanguage(translation.LanguageInformation.LanguageShortTag,
                     fileNamePaths[y]);
+                CreateFileIfNotExists(fileNamePaths[y]);
+
+                var templateFilePath = GetAbsoluteLocaleDir() + "/" + fileNames[y] + ".pot";
+                if (File.Exists(templateFilePath))
+                {
+                    potDate = File.ReadAllLines(templateFilePath).Skip(3).FirstOrDefault();
+                }
 
                 var fileNamePotList = new List<string>(fileNamePaths)
                 {
@@ -169,44 +176,18 @@ namespace i18n.Domain.Concrete
                           ".backup"
                 };
 
-                if (File.Exists(fileNamePaths[y]))
-                    //we backup one version. more advanced backup solutions could be added here.
-                {
-                    if (File.Exists(fileNamePotList[y]))
-                    {
-                        File.Delete(fileNamePotList[y]);
-                    }
-                    System.IO.File.Move(fileNamePaths[y], fileNamePotList[y]);
-                }
+                var tempFile = $"{fileNamePaths[y]}.temp";
 
-                if (File.Exists(fileNamePaths[y])) //we make sure the old file is removed first
+                using (var stream = new StreamWriter(tempFile))
                 {
-                    File.Delete(fileNamePaths[y]);
-                }
-
-                bool hasReferences = false;
-
-                if (!File.Exists(fileNamePaths[y]))
-                {
-                    var fileInfo = new FileInfo(fileNamePaths[y]);
-                    var dirInfo = new DirectoryInfo(Path.GetDirectoryName(fileNamePaths[y]));
-                    if (!dirInfo.Exists)
-                    {
-                        dirInfo.Create();
-                    }
-                    fileInfo.Create().Close();
-                }
-
-                using (StreamWriter stream = new StreamWriter(fileNamePaths[y]))
-                {
-                    DebugHelpers.WriteLine("Writing file: {0}", fileNamePaths[y]);
+                    DebugHelpers.WriteLine("Writing file: {0}", tempFile);
 
                     IEnumerable<TranslationItem> orderedItems = translation.Items.Values;
 
                     if (_settings.GenerateTemplatePerFile)
                     {
                         orderedItems = translation.Items.Values
-                            .OrderBy(x => x.References == null || x.References.Count() == 0)
+                            .OrderBy(x => x.References == null || !x.References.Any())
                             .ThenBy(x => x.MsgKey)
                             .Where(x => x.FileName == fileNames[y]);
                     }
@@ -216,26 +197,16 @@ namespace i18n.Domain.Concrete
                             _settings.LocaleFilename))
                     {
                         orderedItems = translation.Items.Values
-                            .OrderBy(x => x.References == null || x.References.Count() == 0)
+                            .OrderBy(x => x.References == null || !x.References.Any())
                             .ThenBy(x => x.MsgKey);
                     }
 
                     //This is required for poedit to read the files correctly if they contains for instance swedish characters
-                    stream.WriteLine("msgid \"\"");
-                    stream.WriteLine("msgstr \"\"");
-                    stream.WriteLine("\"Project-Id-Version: \\n\"");
-                    stream.WriteLine("\"POT-Creation-Date: " + POTDate.ToString("yyyy-MM-dd HH:mmzzz") + "\\n\"");
-                    stream.WriteLine("\"PO-Revision-Date: " + DateTime.Now.ToString("yyyy-MM-dd HH:mmzzz") +
-                                     "\\n\"");
-                    stream.WriteLine("\"MIME-Version: 1.0\\n\"");
-                    stream.WriteLine("\"Content-Type: text/plain; charset=utf-8\\n\"");
-                    stream.WriteLine("\"Content-Transfer-Encoding: 8bit\\n\"");
-                    stream.WriteLine("\"X-Generator: i18n.POTGenerator\\n\"");
-                    stream.WriteLine();
+                    OutputHeader(stream, potDate);
 
                     foreach (var item in orderedItems)
                     {
-                        hasReferences = false;
+                        var hasReferences = false;
 
                         if (item.TranslatorComments != null)
                         {
@@ -285,6 +256,21 @@ namespace i18n.Domain.Concrete
                         stream.WriteLine("");
                     }
                 }
+
+                if (FilesTheSame(tempFile, fileNamePaths[y], 5))
+                {
+                    //if (File.Exists(fileNamePaths[y]))
+                    //    File.Copy(fileNamePotList[y], fileNamePaths[y], true);
+                    //else
+                    //    File.Move(fileNamePotList[y], fileNamePaths[y]);
+
+                    File.Delete(tempFile);
+                }
+                else
+                {
+                    CreateBackupFile(fileNamePaths[y]);
+                    File.Move(tempFile, fileNamePaths[y]);
+                }
             }
         }
 
@@ -311,56 +297,26 @@ namespace i18n.Domain.Concrete
 
         private bool SaveTemplate(IDictionary<string, TemplateItem> items, string fileName)
         {
-            string filePath = GetAbsoluteLocaleDir() + "/" +
+            var filePath = GetAbsoluteLocaleDir() + "/" +
                               (!string.IsNullOrWhiteSpace(fileName) ? fileName : _settings.LocaleFilename) + ".pot";
-            string backupPath = filePath + ".backup";
+            var backupPath = filePath + ".backup";
+            var tempPath = $"{filePath}.temp";
 
-            if (File.Exists(filePath)) //we backup one version. more advanced backup solutions could be added here.
-            {
-                if (File.Exists(backupPath))
-                {
-                    File.Delete(backupPath);
-                }
-                System.IO.File.Move(filePath, backupPath);
-            }
+            CreateFileIfNotExists(filePath);
 
-            if (File.Exists(filePath)) //we make sure the old file is removed first
+            using (StreamWriter stream = new StreamWriter(tempPath))
             {
-                File.Delete(filePath);
-            }
-
-            if (!File.Exists(filePath))
-            {
-                var fileInfo = new FileInfo(filePath);
-                var dirInfo = new DirectoryInfo(Path.GetDirectoryName(filePath));
-                if (!dirInfo.Exists)
-                {
-                    dirInfo.Create();
-                }
-                fileInfo.Create().Close();
-            }
-
-            using (StreamWriter stream = new StreamWriter(filePath))
-            {
-                DebugHelpers.WriteLine("Writing file: {0}", filePath);
+                DebugHelpers.WriteLine("Writing file: {0}", tempPath);
                 // Establish ordering of items in PO file.
                 var orderedItems = items.Values
-                    .OrderBy(x => x.References == null || x.References.Count() == 0)
+                    .OrderBy(x => x.References == null || !x.References.Any())
                     // Non-orphan items before orphan items.
                     .ThenBy(x => x.MsgKey);
                 // Then order alphanumerically.
 
                 // This is required for poedit to read the files correctly if they contains 
                 // for instance swedish characters.
-                stream.WriteLine("msgid \"\"");
-                stream.WriteLine("msgstr \"\"");
-                stream.WriteLine("\"Project-Id-Version: \\n\"");
-                stream.WriteLine("\"POT-Creation-Date: " + DateTime.Now.ToString("yyyy-MM-dd HH:mmzzz") + "\\n\"");
-                stream.WriteLine("\"MIME-Version: 1.0\\n\"");
-                stream.WriteLine("\"Content-Type: text/plain; charset=utf-8\\n\"");
-                stream.WriteLine("\"Content-Transfer-Encoding: 8bit\\n\"");
-                stream.WriteLine("\"X-Generator: i18n.POTGenerator\\n\"");
-                stream.WriteLine();
+                OutputHeader(stream);
 
                 foreach (var item in orderedItems)
                 {
@@ -391,18 +347,16 @@ namespace i18n.Domain.Concrete
                 }
             }
 
-            //we just compare output file with the backed up file to check for changes
-            if (File.Exists(filePath) && File.Exists(backupPath))
+            if (!FilesTheSame(tempPath, filePath))
             {
-                //We skip the four first lines since the fourth will always be different (the generation date)
-                var newContent = File.ReadAllLines(filePath).Skip(4).ToList();
-                var oldContent = File.ReadAllLines(backupPath).Skip(4).ToList();
-                if (newContent.Zip(oldContent, (n, o) => o != null && o.Equals(n)).All(b => b))
-                {
-                    File.Copy(backupPath, filePath, true);
-                    return false;
-                }
+                CreateBackupFile(filePath);
+                File.Move(tempPath, filePath);
             }
+            else
+            {
+                File.Delete(tempPath);
+            }
+
             return true;
         }
 
@@ -821,6 +775,65 @@ namespace i18n.Domain.Concrete
         }
 
         #endregion
+
+        private static void CreateFileIfNotExists(string file)
+        {
+            if (!File.Exists(file))
+            {
+                var fileInfo = new FileInfo(file);
+                var dirInfo = new DirectoryInfo(Path.GetDirectoryName(file));
+
+                if (!dirInfo.Exists)
+                {
+                    dirInfo.Create();
+                }
+
+                fileInfo.Create().Close();
+            }
+        }
+
+        private static void CreateBackupFile(string file)
+        {
+            var backupFile = $"{file}.backup";
+
+            if (File.Exists(file)) //we backup one version. more advanced backup solutions could be added here.
+            {
+                if (File.Exists(backupFile))
+                {
+                    File.Delete(backupFile);
+                }
+
+                File.Move(file, backupFile);
+                File.Delete(file);
+            }
+        }
+
+        private bool FilesTheSame(string fileOne, string fileTwo, int skip = 4)
+        {
+            if (!File.Exists(fileOne) || !File.Exists(fileTwo)) return false;
+
+            var newContent = File.ReadAllLines(fileOne).Skip(skip).ToList();
+            var oldContent = File.ReadAllLines(fileTwo).Skip(skip).ToList();
+
+            return newContent.Zip(oldContent, (n, o) => o != null && o.Equals(n)).All(b => b);
+        }
+
+        private static void OutputHeader(StreamWriter stream, string potDate = null)
+        {
+            stream.WriteLine("msgid \"\"");
+            stream.WriteLine("msgstr \"\"");
+            stream.WriteLine("\"Project-Id-Version: \\n\"");
+            stream.WriteLine(string.IsNullOrWhiteSpace(potDate) ? $"\"POT-Creation-Date: {DateTime.Now:yyyy-MM-dd HH:mmzzz}\\n\"" : potDate);
+            if (!string.IsNullOrWhiteSpace(potDate))
+            {
+                stream.WriteLine($"\"PO-Revision-Date: {DateTime.Now:yyyy-MM-dd HH:mmzzz}\\n\"");
+            }
+            stream.WriteLine("\"MIME-Version: 1.0\\n\"");
+            stream.WriteLine("\"Content-Type: text/plain; charset=utf-8\\n\"");
+            stream.WriteLine("\"Content-Transfer-Encoding: 8bit\\n\"");
+            stream.WriteLine("\"X-Generator: i18n.POTGenerator\\n\"");
+            stream.WriteLine();
+        }
 
         #endregion
     }
