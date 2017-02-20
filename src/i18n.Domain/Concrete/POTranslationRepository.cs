@@ -815,7 +815,7 @@ namespace i18n.Domain.Concrete
             var newContent = File.ReadAllLines(fileOne).Skip(skip).ToList();
             var oldContent = File.ReadAllLines(fileTwo).Skip(skip).ToList();
 
-            return newContent.Zip(oldContent, (n, o) => o != null && o.Equals(n)).All(b => b);
+            return oldContent.Count != 0 && newContent.Zip(oldContent, (n, o) => o != null && o.Equals(n)).All(b => b);
         }
 
         private static void OutputHeader(StreamWriter stream, string potDate = null)
